@@ -1,0 +1,43 @@
+import joblib
+import pandas as pd
+
+# Φόρτωση του αποθηκευμένου μοντέλου και vectorizer
+vectorizer_path = "tfidf_vectorizer.pkl"
+model_path = "best_naive_bayes_model.pkl"
+
+vectorizer = joblib.load(vectorizer_path)
+model = joblib.load(model_path)
+
+# Φόρτωση του αρχείου ddp.txt
+input_file = "myth_dia_correct.txt"
+with open(input_file, 'r', encoding='utf-8') as file:
+    lines = file.readlines()
+
+# Προεπεξεργασία γραμμών
+lines_cleaned = [line.strip() for line in lines if line.strip()]  # Αφαίρεση κενών γραμμών
+
+# Μετασχηματισμός κειμένου μέσω του vectorizer
+X_test = vectorizer.transform(lines_cleaned)
+
+# Πρόβλεψη κατηγοριών
+predictions = model.predict(X_test)
+
+# Δημιουργία DataFrame για αποτελέσματα
+results_df = pd.DataFrame({
+    'Text': lines_cleaned,
+    'Predicted_Label': predictions,
+    'Length': [len(line) for line in lines_cleaned]  # Μήκος κάθε γραμμής
+})
+
+# Υπολογισμός ποσοστών με βάση το συνολικό μήκος
+total_length = results_df['Length'].sum()
+weighted_counts = results_df.groupby('Predicted_Label')['Length'].sum()
+weighted_percentages = (weighted_counts / total_length) * 100
+
+print("Ποσοστά κατηγοριών (βάσει μήκους):")
+print(weighted_percentages)
+
+# Αποθήκευση αποτελεσμάτων
+output_file = "myth_after_further_cleaning.csv"
+results_df.to_csv(output_file, index=False, encoding='utf-8')
+print(f"Οι προβλέψεις αποθηκεύτηκαν στο: {output_file}")

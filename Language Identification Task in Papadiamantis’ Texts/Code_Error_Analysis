@@ -1,0 +1,78 @@
+import joblib
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Φόρτωση του αποθηκευμένου μοντέλου και vectorizer
+vectorizer_path = "tfidf_vectorizer.pkl"
+model_path = "best_naive_bayes_model.pkl"
+
+vectorizer = joblib.load(vectorizer_path)
+model = joblib.load(model_path)
+
+# Φόρτωση του αρχείου προς επεξεργασία
+input_file = "diig_dia_ag_final_correct.txt"  # Αντικατάστησε με το αρχείο που επεξεργάζεσαι
+with open(input_file, 'r', encoding='utf-8') as file:
+    lines = file.readlines()
+
+# Προεπεξεργασία γραμμών
+lines_cleaned = [line.strip() for line in lines if line.strip()]
+
+# Μετασχηματισμός κειμένου μέσω του vectorizer
+X_test = vectorizer.transform(lines_cleaned)
+
+# Πρόβλεψη πιθανοτήτων κατηγοριών
+probabilities = model.predict_proba(X_test)
+
+# Εύρεση των δύο πιθανότερων labels
+top_two_indices = np.argsort(probabilities, axis=1)[:, -2:][:, ::-1]
+top_two_labels = [[model.classes_[idx] for idx in row] for row in top_two_indices]
+top_two_probs = [[probabilities[i, idx] for idx in row] for i, row in enumerate(top_two_indices)]
+
+# Δημιουργία DataFrame για αποτελέσματα
+results_df = pd.DataFrame({
+    'Text': lines_cleaned,
+    'Length': [len(line) for line in lines_cleaned],  # Μήκος κάθε γραμμής
+    'Top_Label_1': [labels[0] for labels in top_two_labels],
+    'Top_Prob_1': [probs[0] for probs in top_two_probs],
+    'Top_Label_2': [labels[1] for labels in top_two_labels],
+    'Top_Prob_2': [probs[1] for probs in top_two_probs]
+})
+
+# Θέσπιση ορίου για τον συνδυασμό κατηγοριών
+threshold = 0.05
+results_df['Decision'] = results_df.apply(
+    lambda row: row['Top_Label_1'] if (row['Top_Prob_1'] - row['Top_Prob_2']) > threshold 
+    else f"{row['Top_Label_1']}-{row['Top_Label_2']}",
+    axis=1
+)
+
+# Υπολογισμός συνολικού μήκους
+total_length = results_df['Length'].sum()
+
+# Υπολογισμός μήκους ανά κατηγορία και συνδυασμό
+length_counts = results_df.groupby('Decision')['Length'].sum()
+
+# Κανονικοποίηση ποσοστών βάσει μήκους
+length_percentages = (length_counts / total_length) * 100
+
+# Εκτύπωση αποτελεσμάτων
+print("Ποσοστά κατηγοριών (βάσει μήκους):")
+print(length_percentages)
+
+# Δημιουργία διαγράμματος ποσοστών
+plt.figure(figsize=(10, 6))
+length_percentages.plot(kind='bar', color='skyblue', alpha=0.8)
+plt.title('Percentages of Categories and Combinations (Length Normalized)')
+plt.ylabel('Percentage (%)')
+plt.xlabel('Categories and Combinations')
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+plt.show()
+
+# Αποθήκευση αποτελεσμάτων σε CSV
+output_file = "diig_length_normalized_results.csv"
+results_df.to_csv(output_file, index=False, encoding='utf-8')
+
+print(f"Τα αποτελέσματα αποθηκεύτηκαν στο: {output_file}")
+

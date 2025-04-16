@@ -1,0 +1,1 @@
+This repository contains useful files from the thesis Computational Criticism of Papadiamantis. Specifically there are 3 folders, one for each chapter of the study: 1) Language Identification in Papadiamanti's texts 2)Identifying topics in Papadiamanti's short stories 3)Clustering Papadiamanti's short stories and novels

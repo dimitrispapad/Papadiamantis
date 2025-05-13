@@ -1,0 +1,61 @@
+import os
+import numpy as np
+import pandas as pd
+from sentence_transformers import SentenceTransformer
+import umap
+from sklearn.preprocessing import normalize
+from sklearn.cluster import AgglomerativeClustering
+import plotly.express as px
+
+# Load all .txt files
+documents = []
+filenames = [f for f in os.listdir() if f.endswith(".txt")]
+
+for fname in filenames:
+    with open(fname, "r", encoding="utf-8") as f:
+        text = f.read()
+    documents.append((fname, text))
+
+# Extract texts and names
+texts = [text for _, text in documents]
+names = [name for name, _ in documents]
+
+# Load DistilUSE model
+model = SentenceTransformer("sentence-transformers/distiluse-base-multilingual-cased-v2")
+embeddings = model.encode(texts, show_progress_bar=True)
+normalized_embeddings = normalize(embeddings, norm='l2')
+
+# Apply UMAP for dimensionality reduction (15D for clustering)
+umap_cluster = umap.UMAP(n_components=15, metric='cosine', random_state=42)
+reduced_embeddings = umap_cluster.fit_transform(normalized_embeddings)
+
+# Agglomerative clustering
+agglo = AgglomerativeClustering(n_clusters=5)
+labels = agglo.fit_predict(reduced_embeddings)
+
+# Apply UMAP again for 2D visualization
+umap_vis = umap.UMAP(n_components=2, metric='cosine', random_state=42)
+vis_2d = umap_vis.fit_transform(normalized_embeddings)
+
+# Create DataFrame with clustering results
+df = pd.DataFrame({
+    "Filename": names,
+    "Text": texts,
+    "Cluster": labels,
+    "X": vis_2d[:, 0],
+    "Y": vis_2d[:, 1]
+})
+
+# Save to CSV
+df.to_csv("distiluse_umap_agglomerative_clusters.csv", index=False)
+
+# Print clusters with filenames
+for cluster_id in sorted(df["Cluster"].unique()):
+    print(f"\n🧠 Cluster {cluster_id}:")
+    for fname in df[df["Cluster"] == cluster_id]["Filename"]:
+        print(f"  • {fname}")
+
+# Visualize with Plotly
+fig = px.scatter(df, x="X", y="Y", color=df["Cluster"].astype(str),
+                 hover_data=["Filename"], title="Agglomerative Clustering (DistilUSE + UMAP)")
+fig.show()

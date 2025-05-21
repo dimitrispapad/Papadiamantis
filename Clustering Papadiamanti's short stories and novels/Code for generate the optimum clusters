@@ -1,41 +1,39 @@
+#best_clusters
 import os
 import numpy as np
 import pandas as pd
 from sentence_transformers import SentenceTransformer
-import umap
 from sklearn.preprocessing import normalize
-from sklearn.cluster import AgglomerativeClustering
+import umap
+import hdbscan
 import plotly.express as px
 
-# Load all .txt files
-documents = []
+# Load .txt files
 filenames = [f for f in os.listdir() if f.endswith(".txt")]
-
-for fname in filenames:
-    with open(fname, "r", encoding="utf-8") as f:
-        text = f.read()
-    documents.append((fname, text))
-
-# Extract texts and names
+documents = [(fname, open(fname, "r", encoding="utf-8").read()) for fname in filenames]
 texts = [text for _, text in documents]
 names = [name for name, _ in documents]
 
-# Load DistilUSE model
+# Embedding using best model
+print("🔍 Embedding with DistilUSE...")
 model = SentenceTransformer("sentence-transformers/distiluse-base-multilingual-cased-v2")
 embeddings = model.encode(texts, show_progress_bar=True)
-normalized_embeddings = normalize(embeddings, norm='l2')
+norm_embeddings = normalize(embeddings, norm="l2").astype(np.float64)
 
-# Apply UMAP for dimensionality reduction (15D for clustering)
+# Apply UMAP (15D) for clustering
+print("📉 Reducing dimensions with UMAP (15D)...")
 umap_cluster = umap.UMAP(n_components=15, metric='cosine', random_state=42)
-reduced_embeddings = umap_cluster.fit_transform(normalized_embeddings)
+reduced_embeddings = umap_cluster.fit_transform(norm_embeddings).astype(np.float64)
 
-# Agglomerative clustering
-agglo = AgglomerativeClustering(n_clusters=5)
-labels = agglo.fit_predict(reduced_embeddings)
+# HDBSCAN with best config
+print("🔗 Clustering with HDBSCAN...")
+clusterer = hdbscan.HDBSCAN(min_cluster_size=10, min_samples=5, metric='euclidean')
+labels = clusterer.fit_predict(reduced_embeddings)
 
-# Apply UMAP again for 2D visualization
+# Apply UMAP (2D) for visualization
+print("🧭 Reducing to 2D for visualization...")
 umap_vis = umap.UMAP(n_components=2, metric='cosine', random_state=42)
-vis_2d = umap_vis.fit_transform(normalized_embeddings)
+vis_2d = umap_vis.fit_transform(norm_embeddings)
 
 # Create DataFrame with clustering results
 df = pd.DataFrame({
@@ -47,9 +45,10 @@ df = pd.DataFrame({
 })
 
 # Save to CSV
-df.to_csv("distiluse_umap_agglomerative_clusters.csv", index=False)
+df.to_csv("distiluse_umap_hdbscan_best_clusters.csv", index=False)
+print("✅ Saved to 'distiluse_umap_hdbscan_best_clusters.csv'")
 
-# Print clusters with filenames
+# Print cluster memberships
 for cluster_id in sorted(df["Cluster"].unique()):
     print(f"\n🧠 Cluster {cluster_id}:")
     for fname in df[df["Cluster"] == cluster_id]["Filename"]:
@@ -57,5 +56,8 @@ for cluster_id in sorted(df["Cluster"].unique()):
 
 # Visualize with Plotly
 fig = px.scatter(df, x="X", y="Y", color=df["Cluster"].astype(str),
-                 hover_data=["Filename"], title="Agglomerative Clustering (DistilUSE + UMAP)")
+                 hover_data=["Filename"], title="DistilUSE + UMAP + HDBSCAN Clustering")
 fig.show()
+
+fig.write_html("cluster_plot.html")
+
